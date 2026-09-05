@@ -9,6 +9,7 @@ the tools.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -25,7 +26,6 @@ pytestmark = pytest.mark.essential
         "../../etc/passwd",
         "/etc/passwd",
         "~/secrets.cellpy",
-        r"\\somehost\share\x.cellpy",
     ],
 )
 def test_paths_outside_the_roots_are_refused(sandbox, hostile):
@@ -33,16 +33,27 @@ def test_paths_outside_the_roots_are_refused(sandbox, hostile):
         sandbox.resolve(hostile, must_exist=False)
 
 
-def test_a_unc_path_is_refused_without_asking_the_network(sandbox):
-    """The volume is settled from the string before any filesystem call.
+def test_a_unc_path_never_reaches_the_network(sandbox):
+    """A UNC path is a Windows idea, and the outcome differs by platform.
 
-    `Path.resolve()` on `\\\\host\\share` asks Windows to go and find *host*,
-    which can block for minutes — and a boundary that waits on a name server is
-    one a name server could answer differently. There is no timing assertion
-    here; the point is that this returns at all, promptly, on every platform.
+    On Windows it names a path on another host and has to be refused — and
+    refused *from the string*, before any filesystem call. ``Path.resolve()``
+    on such a path asks Windows to go and find that host, which can block for
+    minutes, and a boundary that waits on a name server is one a name server
+    could answer differently.
+
+    On posix the same characters are an ordinary (ugly) filename, so it lands
+    inside the root. That is the safe outcome too, and asserting it is worth
+    more than skipping the test: what has to hold on both platforms is that
+    nothing outside the sandbox is reachable and nothing asks the network.
     """
-    with pytest.raises(Refused):
-        sandbox.resolve(r"\\somehost\share\x.cellpy", must_exist=False)
+    hostile = r"\\somehost\share\x.cellpy"
+
+    if sys.platform == "win32":
+        with pytest.raises(Refused):
+            sandbox.resolve(hostile, must_exist=False)
+    else:
+        assert sandbox.resolve(hostile, must_exist=False).is_relative_to(sandbox.primary)
 
 
 def test_a_refusal_says_where_you_could_have_written_instead(sandbox):
