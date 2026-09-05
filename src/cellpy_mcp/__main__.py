@@ -23,7 +23,15 @@ def main(argv: list[str] | None = None) -> int:
 
     install = subcommands.add_parser("install", help="register with a chat client")
     install.add_argument("--root", help="a directory the server may read and write")
-    install.add_argument("--client", help="which chat client to register with")
+    install.add_argument(
+        "--client",
+        help="which client to register with (default: claude-desktop)",
+    )
+    install.add_argument(
+        "--list-clients",
+        action="store_true",
+        help="list the clients this knows about and where each keeps its config",
+    )
     install.add_argument(
         "--dry-run", action="store_true", help="print the target instead of writing"
     )
@@ -41,6 +49,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "install":
+        if args.list_clients:
+            from .clients import CLIENTS, MANUAL, command_for, config_path
+
+            for name, spec in sorted(CLIENTS.items()):
+                print(f"{name:<16} {config_path(name)}")
+                if spec.note:
+                    print(f"{'':<16} ({spec.note})")
+            for name in sorted(MANUAL):
+                print(f"{name:<16} run: {command_for(name)}")
+            return 0
         try:
             target = do_install(root=args.root, client=args.client, dry_run=args.dry_run)
         except ValueError as exc:

@@ -59,17 +59,38 @@ def install(
 
 def describe() -> dict:
     """What `cellpy mcp status` reports beyond the two version numbers."""
-    from .clients import config_path
+    from .clients import CLIENTS, config_path
     from .sandbox import Sandbox
 
     sandbox = Sandbox.from_environment()
     described = {"roots": ", ".join(str(root) for root in sandbox.roots)}
-    try:
-        target = config_path()
-    except ValueError:  # pragma: no cover - only if CLIENTS shrinks
-        return described
-    described["client config"] = f"{target}{'' if target.exists() else ' (not present)'}"
+
+    # Every client this can write to, and whether cellpy is already in it —
+    # "which client did I register with?" is the question `status` exists for,
+    # and answering it for one client while supporting three would mislead.
+    registered = []
+    for name in sorted(CLIENTS):
+        try:
+            target = config_path(name)
+        except ValueError:  # pragma: no cover - only if CLIENTS changes shape
+            continue
+        if _has_cellpy(target, CLIENTS[name].key):
+            registered.append(name)
+    described["registered with"] = ", ".join(registered) if registered else "nothing yet"
     return described
+
+
+def _has_cellpy(target, key: str) -> bool:
+    """True when `target` already names a `cellpy` server under `key`."""
+    import json
+
+    try:
+        config = json.loads(target.read_text(encoding="utf-8") or "{}")
+    except (OSError, json.JSONDecodeError):
+        # Unreadable or malformed is not this function's problem to report;
+        # `install` says so properly when it is asked to write.
+        return False
+    return isinstance(config, dict) and "cellpy" in (config.get(key) or {})
 
 
 def __getattr__(name: str):
