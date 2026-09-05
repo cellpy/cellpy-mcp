@@ -23,7 +23,12 @@ classifiers = [
 ]
 
 dependencies = [
-    "cellpy>=2.1.3",
+    # 2.1.3.post3 is the first release carrying the `cellpy mcp` command group
+    # (jepegit/cellpy#992). The package runs standalone on anything from 2.1.3
+    # via `python -m cellpy_mcp`, but the documented way in is `cellpy mcp
+    # install`, and a floor that lets someone install a cellpy without it turns
+    # the first line of the README into a "command not found".
+    "cellpy>=2.1.3.post3",
     "mcp>=2.0",
     "plotly>=5.22",
 ]

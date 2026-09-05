@@ -81,7 +81,7 @@ Worth doing for the first release, because the failure modes are all one-way.
 
 - <https://pypi.org/project/cellpy-mcp/> renders the README.
 - `pip install cellpy-mcp` then `python -m cellpy_mcp status` prints roots.
-- With cellpy 2.2 or newer, `cellpy mcp status` reports the installed version
+- `cellpy mcp status` (cellpy 2.1.3.post3 or newer) reports the installed version
   rather than telling you to install it — that path is the reason the contract
   in `__init__.py` is pinned by `tests/test_contract.py`.
 

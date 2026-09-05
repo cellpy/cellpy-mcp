@@ -115,7 +115,8 @@ written.
 
 ## Running it without cellpy's shim
 
-`cellpy mcp serve` needs cellpy 2.2 or newer. Otherwise:
+`cellpy mcp` arrived in cellpy 2.1.3.post3, which this package requires. The
+same things are reachable without it:
 
 ```bash
 python -m cellpy_mcp serve
