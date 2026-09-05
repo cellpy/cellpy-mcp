@@ -1,0 +1,65 @@
+[project]
+name = "cellpy-mcp"
+# Single-sourced from the package, so a release cannot ship a wheel whose
+# metadata and __version__ disagree — see [tool.hatch.version] below.
+dynamic = ["version"]
+description = "MCP server for cellpy — battery cell data, plots and the cellpy API, for agents and chat clients."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+# cellpy itself requires >= 3.13, so this cannot be lower however much the MCP
+# SDK would allow (it takes 3.10).
+requires-python = ">=3.13"
+authors = [{ name = "cellpy" }]
+keywords = ["battery", "electrochemistry", "cellpy", "mcp", "agents", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+
+dependencies = [
+    "cellpy>=2.1.3",
+    "mcp>=2.0",
+    "plotly>=5.22",
+]
+
+[project.urls]
+Homepage = "https://github.com/cellpy/cellpy-mcp"
+Repository = "https://github.com/cellpy/cellpy-mcp"
+Issues = "https://github.com/cellpy/cellpy-mcp/issues"
+cellpy = "https://github.com/jepegit/cellpy"
+
+[project.scripts]
+# `cellpy mcp serve` is the discoverable spelling and goes through cellpy's
+# shim. This is the same thing without it — useful in a client config, where
+# naming the executable directly is one less layer to get wrong.
+cellpy-mcp = "cellpy_mcp.__main__:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "tables"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/cellpy_mcp/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cellpy_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/", "tests/", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "essential: critical-path tests run in GitHub Actions CI",
+    "network: needs the network (a cookiecutter clone); deselected in CI",
+]

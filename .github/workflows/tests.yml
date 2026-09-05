@@ -1,0 +1,55 @@
+# The single source of the required "Tests / essential" check.
+#
+# Always trigger, decide nothing, report exactly once. Sibling repositories
+# learned the hard way that two workflows sharing a check name — one gated on
+# `paths` and one on `paths-ignore` — both fire for a PR touching code *and*
+# docs, and `gh pr checks` then shows whichever it likes.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  essential:
+    name: essential
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      # `-m "not network"`: `new_project`'s happy path clones a cookiecutter
+      # from GitHub. A test that depends on someone else's repository being up
+      # is a test that fails for reasons that are not ours, so it is marked and
+      # run by hand. Its refusals — which are reached before any network call —
+      # run here.
+      - name: Run tests
+        run: uv run pytest -m "not network"
+
+  # `requires-python = ">=3.13"` is a promise, and a promise nothing checks is
+  # a promise that breaks quietly: `uv tool install` picks the newest
+  # interpreter it can find, so a user installing from PyPI gets whatever is
+  # newest, not what CI happened to test on.
+  #
+  # Deliberately a separate job rather than a matrix on `essential`: a matrix
+  # renames the check to "essential (3.14)" and silently detaches any required
+  # status check configured against the old name.
+  newest-python:
+    name: newest-python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run tests on the newest supported Python
+        run: uv run --python 3.14 --extra dev pytest -m "not network"
