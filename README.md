@@ -59,6 +59,68 @@ Batch templating:
 
 Prompts: `analyse_cell`, `start_batch_project`, `explain_call`.
 
+## Registering with your client
+
+`cellpy mcp install` writes the block for you. Pass `--client` for anything
+other than Claude Desktop:
+
+```bash
+cellpy mcp install                     # Claude Desktop (default)
+cellpy mcp install --client cursor
+cellpy mcp install --client vscode
+cellpy mcp install --list-clients      # where each one keeps its config
+```
+
+Add `--dry-run` to see the target first. Restart the client afterwards — none
+of them re-read the file while running.
+
+| Client | File it writes | Key |
+|---|---|---|
+| Claude Desktop | `%APPDATA%/Claude/claude_desktop_config.json` · `~/Library/Application Support/Claude/…` · `~/.config/Claude/…` | `mcpServers` |
+| Cursor | `~/.cursor/mcp.json` — global; a project's `.cursor/mcp.json` wins over it | `mcpServers` |
+| VS Code | `%APPDATA%/Code/User/mcp.json` · `~/Library/Application Support/Code/User/mcp.json` · `~/.config/Code/User/mcp.json` | `servers` |
+
+**VS Code names the key `servers`, not `mcpServers`.** If you edit that file by
+hand, this is the mistake to avoid: the wrong key parses, saves, and does
+nothing at all.
+
+### Claude Code
+
+Claude Code is not registered by editing a file — its servers live in
+`~/.claude.json` alongside your sign-in session and per-project trust
+decisions, or in a project-scoped `.mcp.json`. It has a command that handles
+scopes properly, so use that:
+
+```bash
+claude mcp add cellpy --env CELLPY_MCP_ROOT=/path/to/cells -- python -m cellpy_mcp
+```
+
+`cellpy mcp install --list-clients` prints that line filled in with the
+interpreter and the roots for your machine.
+
+### By hand
+
+Any client that speaks stdio can run this; it is an ordinary MCP server. The
+block is the same everywhere except the top-level key:
+
+```json
+{
+  "mcpServers": {
+    "cellpy": {
+      "command": "/path/to/python",
+      "args": ["-m", "cellpy_mcp"],
+      "env": { "CELLPY_MCP_ROOT": "/path/to/cells" }
+    }
+  }
+}
+```
+
+Use the **full path to the interpreter that has cellpy-mcp installed**, not a
+bare `python`: a desktop client activates no virtualenv and inherits no shell
+PATH, which is the most common reason a server shows up as failed.
+
+`cellpy mcp status` says which clients it can see cellpy registered with.
+
 ## Where it may read and write
 
 Everything is confined to a set of roots, and both reads and writes are checked

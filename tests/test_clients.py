@@ -97,3 +97,90 @@ def test_several_roots_travel_as_one_environment_variable(tmp_path):
 
     entry = clients.server_entry([tmp_path / "a", tmp_path / "b"])
     assert entry["env"]["CELLPY_MCP_ROOT"].count(os.pathsep) == 1
+
+
+# -- more than one client (#1) ---------------------------------------------------
+
+
+@pytest.mark.parametrize("client", sorted(clients.CLIENTS))
+def test_every_client_resolves_to_a_plausible_path(client):
+    """A path that is relative, or lands on `/`, would write somewhere strange."""
+    path = clients.config_path(client)
+    assert path.is_absolute()
+    assert path.suffix == ".json"
+    assert path.parent != path.anchor
+
+
+def test_vscode_uses_its_own_key(tmp_path, monkeypatch):
+    """The trap that fails silently.
+
+    VS Code reads `servers`; everyone else reads `mcpServers`. Writing the
+    wrong one produces a file that parses, saves, and does nothing — no error
+    anywhere, and the user is left believing they registered.
+    """
+    target = tmp_path / "vscode" / "mcp.json"
+    monkeypatch.setattr(clients, "config_path", lambda client=None: target)
+
+    clients.install([tmp_path], client="vscode")
+    config = json.loads(target.read_text(encoding="utf-8"))
+
+    assert "servers" in config
+    assert "cellpy" in config["servers"]
+    assert "mcpServers" not in config
+
+
+def test_the_others_use_mcpservers(tmp_path, monkeypatch):
+    for client in ("claude-desktop", "cursor"):
+        target = tmp_path / client / "config.json"
+        monkeypatch.setattr(clients, "config_path", lambda client=None, t=target: t)
+        clients.install([tmp_path], client=client)
+        config = json.loads(target.read_text(encoding="utf-8"))
+        assert "cellpy" in config["mcpServers"], client
+        assert "servers" not in config, client
+
+
+def test_an_existing_vscode_file_keeps_its_other_servers(tmp_path, monkeypatch):
+    target = tmp_path / "mcp.json"
+    target.write_text(
+        json.dumps({"servers": {"playwright": {"command": "npx"}}, "inputs": []}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(clients, "config_path", lambda client=None: target)
+
+    clients.install([tmp_path], client="vscode")
+    config = json.loads(target.read_text(encoding="utf-8"))
+
+    assert config["servers"]["playwright"] == {"command": "npx"}
+    assert config["inputs"] == []
+    assert "cellpy" in config["servers"]
+
+
+def test_claude_code_is_not_written_to_but_is_answered(tmp_path):
+    """Its servers share a file with the sign-in session and trust decisions.
+
+    Refusing to edit that is the point — but a refusal that does not say what
+    to do instead just moves the problem, so the message carries the command.
+    """
+    with pytest.raises(ValueError) as raised:
+        clients.config_path("claude-code")
+
+    message = str(raised.value)
+    assert "claude mcp add" in message
+
+    command = clients.command_for("claude-code", [tmp_path])
+    assert command.startswith("claude mcp add cellpy")
+    assert "CELLPY_MCP_ROOT=" in command
+    assert "-m cellpy_mcp" in command
+
+
+def test_installing_into_one_client_does_not_touch_another(tmp_path, monkeypatch):
+    """Each client has its own file; registering with Cursor is not a VS Code edit."""
+    cursor = tmp_path / "cursor.json"
+    vscode = tmp_path / "vscode.json"
+    paths = {"cursor": cursor, "vscode": vscode}
+    monkeypatch.setattr(clients, "config_path", lambda client=None: paths[client])
+
+    clients.install([tmp_path], client="cursor")
+
+    assert cursor.exists()
+    assert not vscode.exists()
