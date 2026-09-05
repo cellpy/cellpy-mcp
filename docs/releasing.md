@@ -96,3 +96,26 @@ Worth doing for the first release, because the failure modes are all one-way.
 - **cellpy is a hard dependency.** Anyone installing this gets cellpy and its
   dependency tree; that is intended, and it is why the MCP SDK lives here rather
   than in cellpy.
+
+## Verification log
+
+**2026-09-05 — the cross-repo contract, exercised for the first time.** Until
+`cellpy mcp` merged (jepegit/cellpy#992, commit `2d9a7d4d`) the two halves had
+only ever been tested against each other's stand-ins: cellpy against a stub
+module, this package against `tests/test_contract.py`. Both installed together
+in one environment:
+
+- `cellpy mcp status` → reports server `0.1.0`, cellpy `2.1.3.post2.dev1`, the
+  three local roots, and the client config path.
+- `cellpy mcp install --dry-run` → names the config file, writes nothing.
+- `cellpy mcp serve`, spawned as a subprocess and driven over stdio by a real
+  MCP client: handshake, 12 tools, 3 prompts.
+- `describe_api("get_cap")` over that transport → the method's own path,
+  `delegates_to` the module-level implementation, 23 parameters with 1
+  undocumented.
+- A refused path came back to the *caller* as text, which is the thing mcp 2.1
+  only does for `ToolError` (see `errors.py`).
+- **stdout was empty** on a start-and-EOF run. cellpy logs a line on import;
+  it goes to stderr. That matters more here than anywhere else, because stdout
+  is the protocol channel and one stray byte on it is a parse error at the
+  other end.
