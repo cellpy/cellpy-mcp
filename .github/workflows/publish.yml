@@ -1,0 +1,136 @@
+# Publish to PyPI on a tag.
+#
+# Trusted publishing (OIDC): GitHub proves this workflow's identity to PyPI
+# directly, so there is no API token to create, store, rotate or leak. The trade
+# is that PyPI must be told to trust *this repository and this workflow file* —
+# a one-time setup in the PyPI web UI, described in docs/releasing.md.
+#
+# Renaming this file, or the environments below, breaks publishing until the
+# trusted publisher is updated to match. Same shape as cellpy-simple-gui's, so
+# whoever cuts a release here already knows how this one works.
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to publish"
+        required: true
+        default: testpypi
+        type: choice
+        options: [testpypi, pypi]
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # A tag is the version. If it disagrees with the package, stop: a wrong
+      # version cannot be corrected after upload, because PyPI never lets a
+      # version number be reused — not even after deleting it.
+      - name: Check the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(uv run --no-project python -c "
+          import re, pathlib
+          src = pathlib.Path('src/cellpy_mcp/__init__.py').read_text()
+          print(re.search(r'__version__\s*=\s*[\"\x27]([^\"\x27]+)', src).group(1))
+          ")"
+          echo "tag=$tag package=$pkg"
+          [ "$tag" = "$pkg" ] || {
+            echo "::error::Tag v$tag does not match __version__ $pkg"
+            exit 1
+          }
+
+      # The tests are the gate. Publishing is irreversible in a way a merge is
+      # not, so this does not trust that CI was green on the commit the tag
+      # happens to point at.
+      - name: Run the tests
+        run: uv run --extra dev pytest -m "not network"
+
+      - name: Build sdist and wheel
+        run: uv build --out-dir dist
+
+      # Catches a broken long_description before PyPI rejects the upload, and a
+      # wheel that lost something before a user finds out the hard way.
+      - name: Check the artifacts
+        run: |
+          set -euo pipefail
+          uv run --no-project --with twine twine check dist/*
+          python - <<'PY'
+          import glob, sys, zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          archive = zipfile.ZipFile(wheel)
+          names = archive.namelist()
+
+          # The four names cellpy's `cellpy mcp` shim imports live in
+          # __init__.py; the rest is what it needs to do anything at all.
+          need = [f"cellpy_mcp/{module}.py" for module in (
+              "__init__", "__main__", "api", "cells", "clients",
+              "errors", "projects", "prompts", "sandbox", "server", "state",
+          )]
+          missing = [name for name in need if name not in names]
+          if missing:
+              sys.exit(f"wheel is missing modules: {missing}")
+
+          # `cellpy-mcp` on PATH is how someone runs this without cellpy's shim,
+          # and a lost entry point is invisible until a user reports it.
+          entry_points = next(
+              (n for n in names if n.endswith(".dist-info/entry_points.txt")), None
+          )
+          if entry_points is None:
+              sys.exit("wheel declares no entry points; the console script is gone")
+          declared = archive.read(entry_points).decode()
+          if "cellpy-mcp" not in declared:
+              sys.exit(f"console script missing from entry points:\n{declared}")
+
+          print(f"{wheel}: {len(names)} entries, modules and console script present")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-testpypi:
+    name: publish (TestPyPI)
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write  # the OIDC token; this is what replaces an API token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: publish (PyPI)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
