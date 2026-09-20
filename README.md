@@ -1,3 +1,5 @@
+<img src="cellpy-icon-bw.svg" height="80" alt="cellpy-icon">
+
 # cellpy-mcp
 
 An [MCP](https://modelcontextprotocol.io) server for
