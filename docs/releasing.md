@@ -70,8 +70,8 @@ Worth doing for the first release, because the failure modes are all one-way.
 3. Tag and push:
 
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
 
 4. Watch Actions. `build` checks that the tag matches `__version__`, runs the
@@ -88,7 +88,7 @@ Worth doing for the first release, because the failure modes are all one-way.
 ## Things that will bite
 
 - **A version can never be reused.** Not after deleting the release, not after
-  yanking it. A bad `0.1.0` means `0.1.1`, so rehearse on TestPyPI.
+  yanking it. A bad `0.2.0` means `0.2.1`, so rehearse on TestPyPI.
 - **Renaming `publish.yml` or an environment breaks publishing**, because the
   pending publisher names both. Update PyPI in the same change.
 - **The tag is the version.** `build` refuses a tag that disagrees with
