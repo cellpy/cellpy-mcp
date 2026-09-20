@@ -1,0 +1,5 @@
+# issue-flow project config. 'mode' is managed by 'issue-flow init'.
+
+[issueflow]
+mode = "standard"
+skill_level = "standard"
