@@ -1,6 +1,4 @@
-<img src="cellpy-icon-bw.svg" height="80" alt="cellpy-icon">
-
-# cellpy-mcp
+# <img src="cellpy-icon-bw.svg" height="40" alt="cellpy-icon"> cellpy-mcp
 
 An [MCP](https://modelcontextprotocol.io) server for
 [cellpy](https://github.com/jepegit/cellpy). It lets an agent — or a chat
