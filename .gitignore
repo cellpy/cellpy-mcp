@@ -8,3 +8,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 uv.lock
+.cache/
+.local/
+.config/
+.cursor/
