@@ -7,6 +7,86 @@ import pytest
 pytestmark = pytest.mark.essential
 
 
+def test_find_cells_returns_hits(drive, root, monkeypatch):
+    target = root / "20240922_SAL12.cellpy"
+    target.write_text("x")
+
+    def fake(project, number_min, number_max, *, kind="cellpy", root=None):
+        return [
+            {
+                "path": str(target),
+                "name": target.name,
+                "number": 12,
+                "kind": kind,
+            }
+        ]
+
+    monkeypatch.setattr("cellpy.filefinder.find_by_project", fake, raising=False)
+
+    async def steps(call):
+        return await call(
+            "find_cells", project="SAL", number_min=10, number_max=15
+        )
+
+    out = drive(steps)
+    assert out["found"] == 1
+    assert out["offer_raw"] is False
+    assert out["remote"] is False
+    assert out["cells"][0]["number"] == 12
+    assert out["cells"][0]["name"] == "20240922_SAL12.cellpy"
+
+
+def test_find_cells_empty_offers_raw_and_does_not_list_raw(drive, monkeypatch):
+    kinds = []
+
+    def fake(project, number_min, number_max, *, kind="cellpy", root=None):
+        kinds.append(kind)
+        return []
+
+    monkeypatch.setattr("cellpy.filefinder.find_by_project", fake, raising=False)
+
+    async def steps(call):
+        return await call(
+            "find_cells", project="SAL", number_min=10, number_max=15
+        )
+
+    out = drive(steps)
+    assert kinds == ["cellpy"]
+    assert out["found"] == 0
+    assert out["cells"] == []
+    assert out["offer_raw"] is True
+
+
+def test_find_cells_remote_cellpy_dir_is_honest(drive, monkeypatch):
+    from cellpy import config
+
+    monkeypatch.setattr(config.paths, "cellpydatadir", "scp://host/data")
+
+    async def steps(call):
+        return await call(
+            "find_cells", project="SAL", number_min=10, number_max=15
+        )
+
+    out = drive(steps)
+    assert out["found"] == 0
+    assert out["remote"] is True
+    assert "remote" in out["reason"]
+    assert out["offer_raw"] is True
+
+
+def test_find_cells_rejects_unknown_kind(drive):
+    async def steps(call):
+        return await call(
+            "find_cells",
+            project="SAL",
+            number_min=10,
+            number_max=15,
+            kind="journal",
+        )
+
+    assert "cellpy" in drive(steps)["refused"]
+
+
 def test_the_whole_arc(drive, demo_cell, root):
     """Load -> collect -> render -> export, as a client actually does it."""
 

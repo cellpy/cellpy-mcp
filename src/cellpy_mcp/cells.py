@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .sandbox import Refused
+from .sandbox import Refused, _is_local_dir
 
 __all__ = ["register", "MAX_PREVIEW_ROWS"]
 
@@ -55,6 +55,69 @@ def register(server, state, sandbox) -> None:
                 )
             out.append(item)
         return {"instruments": out, **sandbox.describe()}
+
+    @server.tool()
+    def find_cells(
+        project: str,
+        number_min: int,
+        number_max: int,
+        kind: str = "cellpy",
+    ) -> dict:
+        """List local cellpy or raw files for a project token and number range.
+
+        Paths come from cellpy config. `kind="cellpy"` never searches raw
+        files. An empty cellpy result sets `offer_raw` so you can ask the
+        user before calling again with `kind="raw"`.
+        """
+        from cellpy import config, filefinder
+
+        if kind not in ("cellpy", "raw"):
+            raise Refused("kind must be 'cellpy' or 'raw'.")
+
+        setting = "cellpydatadir" if kind == "cellpy" else "rawdatadir"
+        configured = getattr(config.paths, setting, None)
+        if configured is not None and not _is_local_dir(configured):
+            return {
+                "found": 0,
+                "cells": [],
+                "offer_raw": kind == "cellpy",
+                "remote": True,
+                "reason": (
+                    f"{setting} is a remote URI; this server only walks "
+                    "local directories."
+                ),
+                **sandbox.describe(),
+            }
+
+        finder = getattr(filefinder, "find_by_project", None)
+        if finder is None:
+            raise Refused(
+                "This cellpy has no filefinder.find_by_project "
+                "(needs jepegit/cellpy#1076)."
+            )
+
+        hits = finder(project, number_min, number_max, kind=kind)
+        cells_out = []
+        for hit in hits:
+            try:
+                path = sandbox.resolve(hit["path"])
+            except Refused:
+                continue
+            cells_out.append(
+                {
+                    "name": hit["name"],
+                    "number": hit["number"],
+                    "path": str(path),
+                }
+            )
+        empty = not cells_out
+        return {
+            "found": len(cells_out),
+            "cells": cells_out,
+            "offer_raw": kind == "cellpy" and empty,
+            "remote": False,
+            **sandbox.describe(),
+        }
 
     @server.tool()
     def load_cell(
