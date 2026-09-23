@@ -124,12 +124,17 @@ def register(server, state, sandbox) -> None:
         path: str,
         instrument: str | None = None,
         mass_mg: float | None = None,
+        nominal_capacity: float | str | None = None,
     ) -> dict:
         """Load one cell file and return a handle plus what the data can support.
 
         `mass_mg` is the active-material mass. Without it every `*_gravimetric`
         column is computed against a default of 1.0 mg — the numbers still
         appear, they are simply wrong, so supply it when you know it.
+
+        `nominal_capacity` is passed to `cellpy.get` as-is: a number uses
+        cellpy units (default mAh/g); a string may carry a unit. There is no
+        lab default — omit it to keep whatever cellpy already uses.
         """
         import cellpy
 
@@ -139,6 +144,8 @@ def register(server, state, sandbox) -> None:
             kwargs["instrument"] = instrument
         if mass_mg is not None:
             kwargs["mass"] = mass_mg
+        if nominal_capacity is not None:
+            kwargs["nominal_capacity"] = nominal_capacity
 
         cell = cellpy.get(**kwargs)
         handle = state.handle("cell")
@@ -153,6 +160,8 @@ def register(server, state, sandbox) -> None:
             "last_cycle": cycles[-1] if cycles else None,
             "mass_mg": cell.mass,
             "mass_was_supplied": mass_mg is not None,
+            "nominal_capacity": cell.nominal_capacity,
+            "nominal_capacity_was_supplied": nominal_capacity is not None,
             # Names only. The frame itself stays here.
             "summary_columns": sorted(cell.data.summary.columns),
         }

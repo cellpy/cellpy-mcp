@@ -87,6 +87,82 @@ def test_find_cells_rejects_unknown_kind(drive):
     assert "cellpy" in drive(steps)["refused"]
 
 
+class _FakeLoadedCell:
+    cell_name = "demo"
+    mass = 2.1
+    nominal_capacity = 320
+
+    class data:
+        class summary:
+            columns = []
+
+    def get_cycle_numbers(self):
+        return [1]
+
+
+def test_load_cell_forwards_nominal_capacity(drive, root, monkeypatch):
+    (root / "demo.cellpy").write_text("x")
+    seen = {}
+
+    def fake_get(**kwargs):
+        seen.update(kwargs)
+        return _FakeLoadedCell()
+
+    monkeypatch.setattr("cellpy.get", fake_get)
+
+    async def steps(call):
+        return await call(
+            "load_cell", path="demo.cellpy", mass_mg=2.1, nominal_capacity=320
+        )
+
+    out = drive(steps)
+    assert seen["mass"] == 2.1
+    assert seen["nominal_capacity"] == 320
+    assert out["nominal_capacity"] == 320
+    assert out["nominal_capacity_was_supplied"] is True
+
+
+def test_load_cell_omits_nominal_capacity_when_not_given(drive, root, monkeypatch):
+    (root / "demo.cellpy").write_text("x")
+    seen = {}
+
+    def fake_get(**kwargs):
+        seen.update(kwargs)
+        return _FakeLoadedCell()
+
+    monkeypatch.setattr("cellpy.get", fake_get)
+
+    async def steps(call):
+        return await call("load_cell", path="demo.cellpy", mass_mg=2.1)
+
+    out = drive(steps)
+    assert "nominal_capacity" not in seen
+    assert out["nominal_capacity_was_supplied"] is False
+
+
+def test_load_cell_forwards_nominal_capacity_string_with_unit(drive, root, monkeypatch):
+    (root / "demo.cellpy").write_text("x")
+    seen = {}
+
+    def fake_get(**kwargs):
+        seen.update(kwargs)
+        return _FakeLoadedCell()
+
+    monkeypatch.setattr("cellpy.get", fake_get)
+
+    async def steps(call):
+        return await call(
+            "load_cell",
+            path="demo.cellpy",
+            mass_mg=2.1,
+            nominal_capacity="320 mAh/g",
+        )
+
+    out = drive(steps)
+    assert seen["nominal_capacity"] == "320 mAh/g"
+    assert out["nominal_capacity_was_supplied"] is True
+
+
 def test_the_whole_arc(drive, demo_cell, root):
     """Load -> collect -> render -> export, as a client actually does it."""
 
