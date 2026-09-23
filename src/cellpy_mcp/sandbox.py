@@ -43,6 +43,15 @@ ROOT_SETTINGS = ("rawdatadir", "cellpydatadir", "outdatadir", "notebookdir")
 FALLBACK_ROOT = Path.home() / "cellpy_mcp"
 
 
+def _is_remote_uri(value: object) -> bool:
+    """True for `scp://…` / `sftp://…` / `ssh://…` — not `C:\\…`."""
+    text = str(value or "").strip()
+    if not text:
+        return False
+    head, separator, _rest = text.partition("://")
+    return bool(separator and len(head) > 1)
+
+
 def _is_local_dir(value: object) -> bool:
     """True when `value` names a plain local directory we can contain paths in.
 
@@ -52,12 +61,40 @@ def _is_local_dir(value: object) -> bool:
     text = str(value or "").strip()
     if not text:
         return False
-    # `scp://…`, `sftp://…`, `ssh://…`. A Windows drive (`C:\…`) is not a
-    # scheme, hence the length guard on what precedes the colon.
-    head, separator, _rest = text.partition("://")
-    if separator and len(head) > 1:
+    return not _is_remote_uri(text)
+
+
+def _uri_under_prefix(path: str, prefix: str) -> bool:
+    """True when *path* is *prefix* or a child of it, with no `..` segments."""
+    candidate = path.strip().rstrip("/")
+    root = prefix.strip().rstrip("/")
+    if candidate == root:
+        return True
+    if not candidate.startswith(root + "/"):
         return False
-    return True
+    rest = candidate[len(root) + 1 :]
+    return not any(part == ".." for part in rest.split("/"))
+
+
+def configured_remote_root(path: str) -> str | None:
+    """Configured `rawdatadir` / `cellpydatadir` URI that contains *path*.
+
+    Local pathlib roots are not consulted here. A miss means the caller must
+    go through `Sandbox.resolve` or be refused.
+    """
+    try:
+        from cellpy import config
+    except Exception:  # noqa: BLE001 - unconfigured cellpy is a miss
+        return None
+
+    for setting in ("rawdatadir", "cellpydatadir"):
+        value = getattr(config.paths, setting, None)
+        if value is None or not _is_remote_uri(value):
+            continue
+        prefix = str(value)
+        if _uri_under_prefix(path, prefix):
+            return prefix.rstrip("/")
+    return None
 
 
 def default_roots() -> list[Path]:

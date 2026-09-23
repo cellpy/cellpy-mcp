@@ -74,6 +74,126 @@ def test_find_cells_remote_cellpy_dir_is_honest(drive, monkeypatch):
     assert out["offer_raw"] is True
 
 
+def test_find_cells_raw_lists_hits_and_needs_metadata(drive, root, monkeypatch):
+    target = root / "20240922_SAL12.res"
+    target.write_text("x")
+
+    def fake(project, number_min, number_max, *, kind="cellpy", root=None):
+        return [
+            {
+                "path": str(target),
+                "name": target.name,
+                "number": 12,
+                "kind": kind,
+            }
+        ]
+
+    monkeypatch.setattr("cellpy.filefinder.find_by_project", fake, raising=False)
+
+    async def steps(call):
+        return await call(
+            "find_cells",
+            project="SAL",
+            number_min=10,
+            number_max=15,
+            kind="raw",
+        )
+
+    out = drive(steps)
+    assert out["found"] == 1
+    assert out["offer_raw"] is False
+    assert out["needs_metadata"] == ["mass", "nominal_capacity"]
+    assert out["cells"][0]["number"] == 12
+
+
+def test_find_cells_raw_remote_returns_uris(drive, monkeypatch):
+    from cellpy import config
+
+    uri = "scp://host/raw/20240922_SAL12.res"
+    monkeypatch.setattr(config.paths, "rawdatadir", "scp://host/raw")
+
+    def fake(project, number_min, number_max, *, kind="cellpy", root=None):
+        return [{"path": uri, "name": "20240922_SAL12.res", "number": 12, "kind": kind}]
+
+    monkeypatch.setattr("cellpy.filefinder.find_by_project", fake, raising=False)
+
+    async def steps(call):
+        return await call(
+            "find_cells",
+            project="SAL",
+            number_min=10,
+            number_max=15,
+            kind="raw",
+        )
+
+    out = drive(steps)
+    assert out["found"] == 1
+    assert out["remote"] is True
+    assert out["cells"][0]["path"] == uri
+    assert out["needs_metadata"] == ["mass", "nominal_capacity"]
+
+
+def test_load_cell_allows_configured_remote_uri(drive, monkeypatch):
+    from cellpy import config
+
+    monkeypatch.setattr(config.paths, "rawdatadir", "scp://host/raw")
+    seen = {}
+
+    class Fake:
+        cell_name = "demo"
+        mass = 2.1
+        nominal_capacity = 320
+
+        class data:
+            class summary:
+                columns = []
+
+        def get_cycle_numbers(self):
+            return [1]
+
+    def fake_get(**kwargs):
+        seen.update(kwargs)
+        return Fake()
+
+    monkeypatch.setattr("cellpy.get", fake_get)
+
+    async def steps(call):
+        return await call(
+            "load_cell",
+            path="scp://host/raw/20240922_SAL12.res",
+            mass_mg=2.1,
+            nominal_capacity=320,
+        )
+
+    out = drive(steps)
+    assert seen["filename"] == "scp://host/raw/20240922_SAL12.res"
+    assert seen["mass"] == 2.1
+    assert seen["nominal_capacity"] == 320
+    assert out["nominal_capacity_was_supplied"] is True
+
+
+def test_load_cell_refuses_unconfigured_remote_uri(drive, monkeypatch):
+    from cellpy import config
+
+    monkeypatch.setattr(config.paths, "rawdatadir", "scp://host/raw")
+
+    async def steps(call):
+        return await call("load_cell", path="scp://evil/loot.res")
+
+    assert "configured remote" in drive(steps)["refused"]
+
+
+def test_load_cell_refuses_remote_parent_escape(drive, monkeypatch):
+    from cellpy import config
+
+    monkeypatch.setattr(config.paths, "rawdatadir", "scp://host/raw")
+
+    async def steps(call):
+        return await call("load_cell", path="scp://host/raw/../secret.res")
+
+    assert "configured remote" in drive(steps)["refused"]
+
+
 def test_find_cells_rejects_unknown_kind(drive):
     async def steps(call):
         return await call(

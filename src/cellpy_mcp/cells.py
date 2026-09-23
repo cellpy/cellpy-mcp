@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .sandbox import Refused, _is_local_dir
+from .sandbox import Refused, _is_local_dir, _is_remote_uri, configured_remote_root
 
 __all__ = ["register", "MAX_PREVIEW_ROWS"]
 
@@ -63,11 +63,14 @@ def register(server, state, sandbox) -> None:
         number_max: int,
         kind: str = "cellpy",
     ) -> dict:
-        """List local cellpy or raw files for a project token and number range.
+        """List cellpy or raw files for a project token and number range.
 
         Paths come from cellpy config. `kind="cellpy"` never searches raw
         files. An empty cellpy result sets `offer_raw` so you can ask the
-        user before calling again with `kind="raw"`.
+        user before calling again with `kind="raw"`. Raw results include
+        `needs_metadata` so you ask for mass and nominal capacity instead
+        of guessing. A remote `rawdatadir` is listed (URIs); load those
+        only when they sit under the configured root.
         """
         from cellpy import config, filefinder
 
@@ -76,11 +79,12 @@ def register(server, state, sandbox) -> None:
 
         setting = "cellpydatadir" if kind == "cellpy" else "rawdatadir"
         configured = getattr(config.paths, setting, None)
-        if configured is not None and not _is_local_dir(configured):
+        remote = configured is not None and not _is_local_dir(configured)
+        if kind == "cellpy" and remote:
             return {
                 "found": 0,
                 "cells": [],
-                "offer_raw": kind == "cellpy",
+                "offer_raw": True,
                 "remote": True,
                 "reason": (
                     f"{setting} is a remote URI; this server only walks "
@@ -99,8 +103,18 @@ def register(server, state, sandbox) -> None:
         hits = finder(project, number_min, number_max, kind=kind)
         cells_out = []
         for hit in hits:
+            raw_path = str(hit["path"])
+            if remote or _is_remote_uri(raw_path):
+                cells_out.append(
+                    {
+                        "name": hit["name"],
+                        "number": hit["number"],
+                        "path": raw_path,
+                    }
+                )
+                continue
             try:
-                path = sandbox.resolve(hit["path"])
+                path = sandbox.resolve(raw_path)
             except Refused:
                 continue
             cells_out.append(
@@ -111,13 +125,16 @@ def register(server, state, sandbox) -> None:
                 }
             )
         empty = not cells_out
-        return {
+        result = {
             "found": len(cells_out),
             "cells": cells_out,
             "offer_raw": kind == "cellpy" and empty,
-            "remote": False,
+            "remote": remote,
             **sandbox.describe(),
         }
+        if kind == "raw":
+            result["needs_metadata"] = ["mass", "nominal_capacity"]
+        return result
 
     @server.tool()
     def load_cell(
@@ -138,8 +155,17 @@ def register(server, state, sandbox) -> None:
         """
         import cellpy
 
-        target = sandbox.resolve(path)
-        kwargs: dict[str, Any] = {"filename": str(target)}
+        if _is_remote_uri(path):
+            root = configured_remote_root(path)
+            if root is None:
+                raise Refused(
+                    f"{path!r} is not under a configured remote data "
+                    "directory (rawdatadir / cellpydatadir)."
+                )
+            filename = path.strip()
+        else:
+            filename = str(sandbox.resolve(path))
+        kwargs: dict[str, Any] = {"filename": filename}
         if instrument:
             kwargs["instrument"] = instrument
         if mass_mg is not None:

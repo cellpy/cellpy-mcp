@@ -35,7 +35,7 @@ Cells and figures:
 | Tool | What it gives you |
 |---|---|
 | `list_instruments` | loaders, and whether each can actually run on this machine |
-| `find_cells` | local files by project + number range; empty cellpy → `offer_raw` |
+| `find_cells` | files by project + number range; empty cellpy → `offer_raw`; `kind=raw` lists raw (incl. configured remote URIs) and sets `needs_metadata` |
 | `load_cell` | a handle, cycle count, mass, optional nominal_capacity, summary column names |
 | `list_cells` | what is loaded |
 | `describe_plot_families` | the 20 summary families, marked available or missing-columns |

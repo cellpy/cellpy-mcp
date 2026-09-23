@@ -14,7 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from cellpy_mcp.sandbox import Refused, Sandbox, default_roots
+from cellpy_mcp.sandbox import (
+    Refused,
+    Sandbox,
+    _uri_under_prefix,
+    configured_remote_root,
+    default_roots,
+)
 
 pytestmark = pytest.mark.essential
 
@@ -138,6 +144,22 @@ def test_remote_cellpy_paths_are_not_treated_as_local_directories(monkeypatch, t
 
     monkeypatch.setattr("cellpy.config.paths", Paths(), raising=False)
     assert default_roots() == [local.resolve()]
+
+
+def test_uri_under_prefix_rejects_siblings_and_dotdot():
+    assert _uri_under_prefix("scp://host/raw/a.res", "scp://host/raw")
+    assert not _uri_under_prefix("scp://host/raw-other/a.res", "scp://host/raw")
+    assert not _uri_under_prefix("scp://host/raw/../secret.res", "scp://host/raw")
+
+
+def test_configured_remote_root_matches_rawdatadir(monkeypatch):
+    class Paths:
+        rawdatadir = "scp://host/raw"
+        cellpydatadir = "/local/cells"
+
+    monkeypatch.setattr("cellpy.config.paths", Paths(), raising=False)
+    assert configured_remote_root("scp://host/raw/a.res") == "scp://host/raw"
+    assert configured_remote_root("scp://evil/a.res") is None
 
 
 def test_an_unconfigured_cellpy_still_gets_a_narrow_root(monkeypatch):
