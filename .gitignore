@@ -12,3 +12,4 @@ uv.lock
 .local/
 .config/
 .cursor/
+*.log
