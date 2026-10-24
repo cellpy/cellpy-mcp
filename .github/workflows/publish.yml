@@ -32,6 +32,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # Same pin as Tests / essential: pyodbc has no cp315 wheel.
+          python-version: "3.14"
 
       # A tag is the version. If it disagrees with the package, stop: a wrong
       # version cannot be corrected after upload, because PyPI never lets a

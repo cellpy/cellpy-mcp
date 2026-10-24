@@ -21,6 +21,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # Unpinned, `uv sync` installs the newest CPython `requires-python`
+          # allows. That became 3.15, and pyodbc 5.3.0 has no cp315 wheel, so
+          # the job dies compiling it. 3.14 is the newest that installs from
+          # wheels; keep it in step with newest-python below.
+          python-version: "3.14"
 
       - name: Sync dependencies
         run: uv sync --extra dev
@@ -33,10 +38,11 @@ jobs:
       - name: Run tests
         run: uv run pytest -m "not network"
 
-  # `requires-python = ">=3.13"` is a promise, and a promise nothing checks is
-  # a promise that breaks quietly: `uv tool install` picks the newest
-  # interpreter it can find, so a user installing from PyPI gets whatever is
-  # newest, not what CI happened to test on.
+  # `requires-python` is a promise, and a promise nothing checks is a promise
+  # that breaks quietly: `uv tool install` picks the newest interpreter it can
+  # find, so a user installing from PyPI gets whatever is newest, not what
+  # `essential` was pinned to. This job is that install. It stays on 3.14
+  # until pyodbc ships a cp315 wheel — the same ceiling as pyproject.toml.
   #
   # Deliberately a separate job rather than a matrix on `essential`: a matrix
   # renames the check to "essential (3.14)" and silently detaches any required

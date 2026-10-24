@@ -8,8 +8,11 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 # cellpy itself requires >= 3.13, so this cannot be lower however much the MCP
-# SDK would allow (it takes 3.10).
-requires-python = ">=3.13"
+# SDK would allow (it takes 3.10). The ceiling is pyodbc 5.3.0, which cellpy
+# depends on and which publishes no wheel for 3.15: `uv sync` would select
+# 3.15 and fail compiling the sdist (it needs unixODBC's sql.h). Lift the
+# ceiling when a cp315 wheel exists.
+requires-python = ">=3.13,<3.15"
 authors = [{ name = "cellpy" }]
 keywords = ["battery", "electrochemistry", "cellpy", "mcp", "agents", "llm"]
 classifiers = [
@@ -18,6 +21,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
