@@ -37,6 +37,10 @@ __all__ = ["Session"]
 class Session:
     cells: dict[str, Any] = field(default_factory=dict)
     collections: dict[str, Any] = field(default_factory=dict)
+    #: Plot kind and the cells that built each collection. Kept beside
+    #: ``collections`` so a later ``render`` to ``.cfz`` can call ``save_bundle``
+    #: without changing what ``collection()`` returns.
+    collection_meta: dict[str, dict] = field(default_factory=dict)
     counter: int = 0
     #: Built on first use by `api._index` and then kept: it imports ten modules
     #: and cellpy is not a cheap import.
