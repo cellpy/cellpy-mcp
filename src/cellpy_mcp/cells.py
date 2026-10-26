@@ -15,14 +15,76 @@ and what a structured result is good at.
 
 from __future__ import annotations
 
+import json
+import zipfile
+from pathlib import Path
 from typing import Any
 
 from .sandbox import Refused, _is_local_dir, _is_remote_uri, configured_remote_root
 
-__all__ = ["register", "MAX_PREVIEW_ROWS"]
+__all__ = ["register", "render_cfz", "MAX_PREVIEW_ROWS"]
 
 #: Hard cap on rows a tool will put in front of a model, whatever it asks for.
 MAX_PREVIEW_ROWS = 20
+
+_CFZ_MISSING = (
+    "A .cfz file needs cellpy.plotting.bundle.save_bundle. "
+    'Install it with pip install "cellpy[plotting-mpl]".'
+)
+
+
+def _save_bundle(cell, **kwargs):
+    try:
+        from cellpy.plotting.bundle import save_bundle
+    except ImportError as exc:
+        raise Refused(_CFZ_MISSING) from exc
+    return save_bundle(cell, **kwargs)
+
+
+def render_cfz(state, handle: str, target: Path, plot_kind: str | None) -> dict:
+    """Write one cell's collection as a ``.cfz`` bundle via cellpy's translator."""
+    if plot_kind == "film":
+        raise Refused(
+            "A density film cannot be written as .cfz. "
+            "Films are out of the bundle format. Use .json or .html."
+        )
+    meta = state.collection_meta.get(handle)
+    if not meta:
+        state.collection(handle)
+        raise Refused(
+            "This collection has no plot kind. Collect it again before writing a .cfz."
+        )
+    cells = list(meta.get("cells") or [])
+    if len(cells) != 1:
+        raise Refused(
+            "A .cfz file is one cell. Collect a single cell, then render that collection."
+        )
+    kind = meta.get("kind")
+    if kind not in ("summary", "cycles", "ica", "dva"):
+        raise Refused(f"A .cfz file cannot store kind {kind!r}.")
+    kwargs: dict[str, Any] = {}
+    if kind == "summary":
+        family = meta.get("family")
+        if not family:
+            raise Refused(
+                "A .cfz summary needs collect(..., family=...). "
+                "Columns alone do not name the plot family."
+            )
+        kwargs["y"] = family
+    elif meta.get("cycles"):
+        kwargs["cycles"] = list(meta["cycles"])
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _save_bundle(state.cell(cells[0]), kind=kind, path=str(target), **kwargs)
+    with zipfile.ZipFile(target) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+    collection = state.collection(handle)
+    return {
+        "path": str(target),
+        "bytes": target.stat().st_size,
+        "format_version": manifest["format_version"],
+        "rows": collection.data.height,
+    }
 
 
 def register(server, state, sandbox) -> None:
@@ -321,6 +383,12 @@ def register(server, state, sandbox) -> None:
 
         handle = state.handle("collection")
         state.collections[handle] = collection
+        state.collection_meta[handle] = {
+            "kind": kind,
+            "cells": list(chosen),
+            "family": family,
+            "cycles": list(cycles or []),
+        }
         data = collection.data
         result = {
             "handle": handle,
@@ -360,19 +428,22 @@ def register(server, state, sandbox) -> None:
         direction: str | None = None,
         spread: bool = False,
     ) -> dict:
-        """Draw a collection and write the figure to `path` (.json or .html).
+        """Draw a collection and write the figure to `path` (.json, .html, or .cfz).
 
         `kind="film"` gives a 2-D density rendering. Note it is a **kind**, not
         a layout: on cellpy 2.1.2 `layout="film"` silently drew lines instead
         (fixed in 2.1.3). The returned `trace_types` is how you check what you
-        actually got.
+        actually got. A density film cannot be a `.cfz` file.
         """
         import plotly.io as pio
 
-        collection = state.collection(handle)
         target = sandbox.resolve(path, must_exist=False)
-        if target.suffix.lower() not in (".json", ".html"):
-            raise Refused("Write a .json or .html figure.")
+        suffix = target.suffix.lower()
+        if suffix == ".cfz":
+            return render_cfz(state, handle, target, kind)
+        if suffix not in (".json", ".html"):
+            raise Refused("Write a .json, .html, or .cfz figure.")
+        collection = state.collection(handle)
 
         kwargs: dict[str, Any] = {"layout": layout}
         if kind:

@@ -41,7 +41,7 @@ Cells and figures:
 | `describe_plot_families` | the 20 summary families, marked available or missing-columns |
 | `collect` | a handle, row count, columns, `is_grouped`, direction counts |
 | `preview_collection` | a few rows, capped at 20 |
-| `render` | writes a figure; returns trace types and points plotted |
+| `render` | writes `.json`, `.html`, or a one-cell `.cfz` bundle; returns trace types, or `format_version` and row count |
 | `export_collection` | writes csv/parquet/json; returns rows and bytes |
 
 The cellpy API — "how does this call work, and what are its arguments":
@@ -150,7 +150,10 @@ while a raw figure can be several MB.
 **Results carry the traps.** `render` returns `trace_types` alongside
 `points_plotted` and `rows_collected`, so an agent that asked for a density film
 can see it got `histogram2d` rather than lines, and one that forgot
-`direction="both"` can see it plotted 891 of 2328 rows. `describe_api` returns
+`direction="both"` can see it plotted 891 of 2328 rows. A `.cfz` path is the
+handover file instead: one cell, through cellpy's `save_bundle`, with
+`format_version` and the row count. A density film is refused, and so is a
+summary collected without `family=`. `describe_api` returns
 `undocumented_parameters` for the same reason: cellpy documents about half its
 arguments, and a model should know when the package never said.
 
